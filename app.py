@@ -1,8 +1,9 @@
 import streamlit as st
-import google.generativeai as genai
-from PIL import Image
+import requests
 import pandas as pd
 import io
+from PIL import Image
+import base64
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Stellantis Scanner", page_icon="🏭", layout="wide")
@@ -10,84 +11,42 @@ st.set_page_config(page_title="Stellantis Scanner", page_icon="🏭", layout="wi
 # ESTILO VISUAL: AZUL STELLANTIS (#243882)
 st.markdown("""
 <style>
-    /* Fundo Principal - Azul da Marca */
-    .stApp {
-        background-color: #243882;
-        color: #ffffff;
-    }
-    
-    /* Textos em Branco para Contraste */
-    h1, h2, h3, p, span, label, div[data-testid="stMarkdownContainer"] p {
-        color: #ffffff !important;
-    }
-    
-    /* Botões: Fundo Branco com Texto Azul */
-    div.stButton > button {
-        background-color: #ffffff;
-        color: #243882;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 5px;
-        font-weight: bold;
-        width: 100%;
-        transition: all 0.3s;
-    }
-    div.stButton > button:hover {
-        background-color: #e0e0e0;
-        color: #243882;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    }
-
-    /* Seletores (Radio Buttons) */
-    div[role="radiogroup"] label {
-        background-color: rgba(255, 255, 255, 0.1);
-        padding: 10px;
-        border-radius: 5px;
-        margin-right: 10px;
-        border: 1px solid rgba(255,255,255,0.2);
-    }
-    
-    /* Inputs de Texto */
-    .stTextInput input {
-        color: #000000;
-    }
+    .stApp { background-color: #243882; color: #ffffff; }
+    h1, h2, h3, p, span, label, div[data-testid="stMarkdownContainer"] p { color: #ffffff !important; }
+    div.stButton > button { background-color: #ffffff; color: #243882; border: none; padding: 0.5rem 1rem; border-radius: 5px; font-weight: bold; width: 100%; }
+    div.stButton > button:hover { background-color: #e0e0e0; color: #243882; }
+    div[role="radiogroup"] label { background-color: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 5px; margin-right: 10px; border: 1px solid rgba(255,255,255,0.2); }
 </style>
 """, unsafe_allow_html=True)
 
 # --- CABEÇALHO ---
 col1, col2 = st.columns([1, 6])
 with col1:
-    # Logo oficial (URL pública confiável)
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Stellantis.svg/2560px-Stellantis.svg.png", width=120)
 with col2:
     st.title("Digitalizador de Apontamento - SPW")
-    st.markdown("**Automacao de Leitura via Google Gemini AI**")
+    st.markdown("**Automacao via Conexão Direta (Sem SDK)**")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Configuração")
     api_key = st.text_input("Cole sua Gemini API Key:", type="password")
-    st.info("Sua chave não será salva permanentemente.")
 
-# --- LÓGICA PRINCIPAL ---
 if not api_key:
-    st.warning("👈 Insira sua API Key na barra lateral esquerda para ativar o sistema.")
+    st.warning("👈 Insira sua API Key para começar.")
     st.stop()
 
-genai.configure(api_key=api_key)
-
+# --- SELETOR DE TURNO ---
 st.divider()
-
-# 1. SELETOR DE TURNO
-st.subheader("1. Selecione o Turno Atual")
 turno = st.radio(
-    "Defina a regra de horário:",
+    "1. Selecione o Turno Atual:",
     ["1º Turno (06:00 - 15:48)", "2º Turno (15:48 - 25:09)", "3º Turno (01:09 - 06:00)"],
-    horizontal=True
+    horizontal=True,
+    index=1
 )
 
-# 2. UPLOAD
-st.subheader("2. Digitalizar Ficha")
+# --- UPLOAD ---
+st.markdown("### 2. Digitalizar Ficha")
 uploaded_file = st.file_uploader("Tire uma foto ou carregue o arquivo", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
@@ -95,67 +54,76 @@ if uploaded_file:
     st.image(image, caption="Imagem Carregada", use_container_width=True)
     
     if st.button("🚀 Processar Apontamento"):
-        with st.spinner("Lendo manuscrito... (Isso leva uns 5 segundos)"):
+        with st.spinner("Conectando diretamente com o Gemini..."):
             try:
-                # MODELO ATUALIZADO
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                # PREPARAR IMAGEM EM BASE64 (Necessário para envio direto)
+                img_byte_arr = io.BytesIO()
+                image.save(img_byte_arr, format='JPEG')
+                img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+
+                # --- CHAMADA DIRETA À API (SEM BIBLIOTECA) ---
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
                 
-                prompt = """
-                Atue como um especialista em OCR industrial.
-                Analise esta imagem de apontamento de produção.
+                payload = {
+                    "contents": [{
+                        "parts": [
+                            {"text": """
+                                Atue como OCR industrial. Analise esta imagem.
+                                Retorne APENAS um JSON (array de objetos) com:
+                                "Data", "Maquina", "Hora", "Desenho", "Qtd_OK", "Qtd_NOK", "Cod_Parada".
+                                Repita Data e Maquina do cabeçalho em todas as linhas.
+                                Se hora tiver ':', mantenha.
+                            """},
+                            {"inline_data": {
+                                "mime_type": "image/jpeg",
+                                "data": img_base64
+                            }}
+                        ]
+                    }]
+                }
                 
-                TAREFA: Extraia todas as linhas da tabela de produção.
-                Para cada linha, encontre a DATA e MÁQUINA no cabeçalho da folha e repita em cada linha.
+                # ENVIA O PEDIDO (POST)
+                response = requests.post(url, json=payload)
                 
-                SAÍDA: Retorne APENAS um JSON (array de objetos) com as chaves:
-                "Data", "Maquina", "Hora", "Desenho", "Qtd_OK", "Qtd_NOK", "Cod_Parada".
+                # VERIFICA SE DEU CERTO
+                if response.status_code != 200:
+                    st.error(f"Erro na API: {response.text}")
+                    st.stop()
                 
-                Regras de Leitura:
-                - Se "Hora" tiver dois pontos (Ex: 06:00), mantenha com os dois pontos por enquanto.
-                - Se campos estiverem vazios, use string vazia.
-                """
-                
-                response = model.generate_content([prompt, image])
-                json_str = response.text.replace("```json", "").replace("```", "").strip()
-                
-                df = pd.read_json(io.StringIO(json_str))
-                
+                # PROCESSA O RESULTADO
+                result_json = response.json()
+                try:
+                    texto_resposta = result_json['candidates'][0]['content']['parts'][0]['text']
+                    clean_json = texto_resposta.replace("```json", "").replace("```", "").strip()
+                    df = pd.read_json(io.StringIO(clean_json))
+                except:
+                    st.error("A IA respondeu, mas não gerou uma tabela válida. Tente outra foto.")
+                    st.stop()
+
                 # --- REGRAS DE NEGÓCIO (PYTHON) ---
                 def tratar_hora(hora_str):
                     if not hora_str: return ""
-                    # Regra 1: Remover :
                     h_limpa = str(hora_str).replace(":", "").strip()
                     try:
                         h_num = int(h_limpa)
                     except:
                         return h_limpa 
                     
-                    # Regra 2: Lógica do 2º Turno (Madrugada vira 25h)
                     if "2º Turno" in turno:
-                        # Se for entre 0000 e 0200, soma 2400
-                        if 0 <= h_num <= 200:
+                        if 0 <= h_num <= 200: # Regra da Madrugada
                             return str(h_num + 2400)
-                    
                     return str(h_num)
 
                 if "Hora" in df.columns:
                     df["Hora"] = df["Hora"].apply(tratar_hora)
                 
-                # Ordenação das colunas
-                cols = ["Data", "Maquina", "Hora", "Desenho", "Qtd_OK", "Qtd_NOK", "Cod_Parada"]
-                for c in cols:
-                    if c not in df.columns: df[c] = ""
-                df = df[cols]
-
-                st.success("✅ Leitura concluída!")
-                st.markdown("### 3. Verificar e Editar")
+                # EXIBIÇÃO
+                st.success("✅ Leitura concluída via Direct API!")
                 df_editado = st.data_editor(df, num_rows="dynamic", use_container_width=True)
                 
-                st.markdown("### 4. Copiar para Excel")
-                csv = df_editado.to_csv(sep="\t", index=False)
-                st.code(csv, language="text")
-                st.info("👆 Clique no ícone de copiar acima e cole no Excel.")
+                tsv = df_editado.to_csv(sep="\t", index=False)
+                st.code(tsv, language="text")
+                st.info("👆 Copie e cole no Excel.")
                 
             except Exception as e:
-                st.error(f"Erro: {e}")
-                st.warning("Dica: Se o erro for 404, reinicie o app no menu superior direito.")
+                st.error(f"Erro inesperado: {e}")
