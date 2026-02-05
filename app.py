@@ -4,84 +4,158 @@ from PIL import Image
 import pandas as pd
 import io
 
-# Configuração da Página
-st.set_page_config(page_title="Stellantis Scanner", page_icon="🏭", layout="centered")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="Stellantis Scanner", page_icon="🏭", layout="wide")
 
-# Estilo Industrial (Dark Mode forçado pelo Streamlit Settings ou CSS)
+# ESTILO VISUAL: AZUL STELLANTIS (#243882)
 st.markdown("""
-    <style>
-    .stApp { background-color: #0e1117; color: #ffffff; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #00a8e8; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.title("🏭 Stellantis Production Scanner")
-st.markdown("### Digitalização de Apontamento via Gemini AI")
-
-# 1. Configuração da API Key
-api_key = st.text_input("Cole sua Gemini API Key aqui:", type="password")
-
-if api_key:
-    genai.configure(api_key=api_key)
+<style>
+    /* Fundo Principal - Azul da Marca */
+    .stApp {
+        background-color: #243882;
+        color: #ffffff;
+    }
     
-    # 2. Seletor de Turno
-    turno = st.radio("Selecione o Turno Atual:", ["1º Turno (06:00 - 15:48)", "2º Turno (15:48 - 01:09)", "3º Turno (01:09 - 06:00)"], index=1)
+    /* Textos em Branco para Contraste */
+    h1, h2, h3, p, span, label, div[data-testid="stMarkdownContainer"] p {
+        color: #ffffff !important;
+    }
+    
+    /* Botões: Fundo Branco com Texto Azul */
+    div.stButton > button {
+        background-color: #ffffff;
+        color: #243882;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 5px;
+        font-weight: bold;
+        width: 100%;
+        transition: all 0.3s;
+    }
+    div.stButton > button:hover {
+        background-color: #e0e0e0;
+        color: #243882;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
 
-    # 3. Upload
-    uploaded_file = st.file_uploader("📸 Tire uma foto da ficha ou faça upload", type=["jpg", "jpeg", "png"])
+    /* Seletores (Radio Buttons) */
+    div[role="radiogroup"] label {
+        background-color: rgba(255, 255, 255, 0.1);
+        padding: 10px;
+        border-radius: 5px;
+        margin-right: 10px;
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    /* Inputs de Texto */
+    .stTextInput input {
+        color: #000000;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file)
-        st.image(image, caption='Ficha Carregada', use_container_width=True)
+# --- CABEÇALHO ---
+col1, col2 = st.columns([1, 6])
+with col1:
+    # Logo oficial (URL pública confiável)
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Stellantis.svg/2560px-Stellantis.svg.png", width=120)
+with col2:
+    st.title("Digitalizador de Apontamento - SPW")
+    st.markdown("**Automacao de Leitura via Google Gemini AI**")
 
-        if st.button("🚀 Processar Imagem"):
-            with st.spinner('O Gemini está lendo a letra do operador...'):
-                try:
-                    # Lógica do Prompt para o Gemini
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    prompt = """
-                    Você é um especialista em OCR industrial. Analise esta imagem de um apontamento de produção manuscrito.
-                    Retorne APENAS um JSON (sem ```json no inicio) com uma lista de objetos contendo:
-                    - "Hora": A hora escrita (Ex: 0600). Se for entre 00:00 e 01:59 e parecer ser final do dia, mantenha o original.
-                    - "Desenho": O código numérico do produto.
-                    - "Qtd_OK": Quantidade de peças boas (número).
-                    - "Qtd_NOK": Quantidade de peças ruins (número).
-                    - "Cod_Parada": Código da parada (texto ou número).
-                    Ignore linhas vazias ou cabeçalhos.
-                    """
+# --- SIDEBAR ---
+with st.sidebar:
+    st.header("⚙️ Configuração")
+    api_key = st.text_input("Cole sua Gemini API Key:", type="password")
+    st.info("Sua chave não será salva permanentemente.")
+
+# --- LÓGICA PRINCIPAL ---
+if not api_key:
+    st.warning("👈 Insira sua API Key na barra lateral esquerda para ativar o sistema.")
+    st.stop()
+
+genai.configure(api_key=api_key)
+
+st.divider()
+
+# 1. SELETOR DE TURNO
+st.subheader("1. Selecione o Turno Atual")
+turno = st.radio(
+    "Defina a regra de horário:",
+    ["1º Turno (06:00 - 15:48)", "2º Turno (15:48 - 25:09)", "3º Turno (01:09 - 06:00)"],
+    horizontal=True
+)
+
+# 2. UPLOAD
+st.subheader("2. Digitalizar Ficha")
+uploaded_file = st.file_uploader("Tire uma foto ou carregue o arquivo", type=["jpg", "jpeg", "png"])
+
+if uploaded_file:
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Imagem Carregada", use_container_width=True)
+    
+    if st.button("🚀 Processar Apontamento"):
+        with st.spinner("Lendo manuscrito... (Isso leva uns 5 segundos)"):
+            try:
+                # MODELO ATUALIZADO
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                
+                prompt = """
+                Atue como um especialista em OCR industrial.
+                Analise esta imagem de apontamento de produção.
+                
+                TAREFA: Extraia todas as linhas da tabela de produção.
+                Para cada linha, encontre a DATA e MÁQUINA no cabeçalho da folha e repita em cada linha.
+                
+                SAÍDA: Retorne APENAS um JSON (array de objetos) com as chaves:
+                "Data", "Maquina", "Hora", "Desenho", "Qtd_OK", "Qtd_NOK", "Cod_Parada".
+                
+                Regras de Leitura:
+                - Se "Hora" tiver dois pontos (Ex: 06:00), mantenha com os dois pontos por enquanto.
+                - Se campos estiverem vazios, use string vazia.
+                """
+                
+                response = model.generate_content([prompt, image])
+                json_str = response.text.replace("```json", "").replace("```", "").strip()
+                
+                df = pd.read_json(io.StringIO(json_str))
+                
+                # --- REGRAS DE NEGÓCIO (PYTHON) ---
+                def tratar_hora(hora_str):
+                    if not hora_str: return ""
+                    # Regra 1: Remover :
+                    h_limpa = str(hora_str).replace(":", "").strip()
+                    try:
+                        h_num = int(h_limpa)
+                    except:
+                        return h_limpa 
                     
-                    response = model.generate_content([prompt, image])
-                    texto_resposta = response.text.replace("```json", "").replace("```", "").strip()
+                    # Regra 2: Lógica do 2º Turno (Madrugada vira 25h)
+                    if "2º Turno" in turno:
+                        # Se for entre 0000 e 0200, soma 2400
+                        if 0 <= h_num <= 200:
+                            return str(h_num + 2400)
                     
-                    # Converte JSON para Tabela (DataFrame)
-                    df = pd.read_json(io.StringIO(texto_resposta))
-                    
-                    # --- APLICANDO A REGRA DE NEGÓCIO DA RAIANE ---
-                    # Remove dois pontos e aplica regra de 25h se for 2º turno
-                    def corrigir_hora(h):
-                        h = str(h).replace(":", "")
-                        if "2º Turno" in turno:
-                            try:
-                                h_num = int(h)
-                                if 0 <= h_num <= 200: # Se for entre 00:00 e 02:00
-                                    return str(h_num + 2400)
-                            except:
-                                pass
-                        return h
+                    return str(h_num)
 
-                    if 'Hora' in df.columns:
-                        df['Hora'] = df['Hora'].apply(corrigir_hora)
-                    
-                    # Mostra Tabela Editável
-                    st.success("Leitura Concluída! Verifique os dados abaixo:")
-                    df_editado = st.data_editor(df, num_rows="dynamic")
+                if "Hora" in df.columns:
+                    df["Hora"] = df["Hora"].apply(tratar_hora)
+                
+                # Ordenação das colunas
+                cols = ["Data", "Maquina", "Hora", "Desenho", "Qtd_OK", "Qtd_NOK", "Cod_Parada"]
+                for c in cols:
+                    if c not in df.columns: df[c] = ""
+                df = df[cols]
 
-                    # Botão de Copiar
-                    tsv = df_editado.to_csv(sep='\t', index=False)
-                    st.code(tsv, language="text")
-                    st.info("👆 Clique no ícone de copiar acima e cole no Excel (Ctrl+V)!")
-
-                except Exception as e:
-                    st.error(f"Erro na leitura: {e}. Tente tirar uma foto mais clara.")
-else:
-    st.warning("👈 Por favor, insira sua API Key para começar.")
+                st.success("✅ Leitura concluída!")
+                st.markdown("### 3. Verificar e Editar")
+                df_editado = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+                
+                st.markdown("### 4. Copiar para Excel")
+                csv = df_editado.to_csv(sep="\t", index=False)
+                st.code(csv, language="text")
+                st.info("👆 Clique no ícone de copiar acima e cole no Excel.")
+                
+            except Exception as e:
+                st.error(f"Erro: {e}")
+                st.warning("Dica: Se o erro for 404, reinicie o app no menu superior direito.")
