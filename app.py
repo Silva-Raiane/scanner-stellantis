@@ -8,23 +8,14 @@ import base64
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Stellantis Scanner", page_icon="🏭", layout="wide")
 
-# --- ESTILO VISUAL INDUSTRIAL (AZUL E AMARELO) ---
+# --- ESTILO VISUAL ---
 st.markdown("""
 <style>
     .stApp { background-color: #243882; color: #ffffff; }
     [data-testid="stSidebar"] { background-color: #00133b; border-right: 1px solid rgba(255, 255, 255, 0.1); }
     h1, h2, h3, p, span, label, div[data-testid="stMarkdownContainer"] p, [data-testid="stSidebar"] label { color: #ffffff !important; }
-    
-    /* Botões Amarelos */
-    div.stButton > button, [data-testid="stFileUploader"] button {
-        background-color: #FFC107 !important; color: #000000 !important; border: none !important;
-        padding: 0.6rem 1rem; border-radius: 6px; font-weight: 800 !important; text-transform: uppercase;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    }
-    div.stButton > button:hover { background-color: #FFD700 !important; transform: translateY(-2px); }
-    
-    .stTextInput input { color: #333333; background-color: #ffffff; }
-    div[role="radiogroup"] label { background-color: rgba(0, 19, 59, 0.6); padding: 12px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, 0.2); }
+    div.stButton > button { background-color: #FFC107 !important; color: #000000 !important; font-weight: 800 !important; }
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] { color: #333333; background-color: #ffffff; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -34,58 +25,78 @@ with col1:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Stellantis.svg/2560px-Stellantis.svg.png", width=120)
 with col2:
     st.title("Digitalizador de Apontamento - SPW")
-    st.markdown("**Modelo Ativo: Gemini 2.0 Flash (Confirmado)**")
+    st.markdown("**Seletor Dinâmico de Modelos**")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Configuração")
     api_key_input = st.text_input("Cole sua Gemini API Key:", type="password")
     api_key = api_key_input.strip() if api_key_input else ""
+    
+    modelos_disponiveis = []
+    modelo_selecionado = ""
+
+    if api_key:
+        try:
+            # BUSCA DINÂMICA: Pergunta ao Google quais modelos você tem
+            url_modelos = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+            resp = requests.get(url_modelos)
+            if resp.status_code == 200:
+                dados = resp.json()
+                # Filtra apenas modelos "generateContent" e "gemini"
+                modelos_disponiveis = [m['name'].replace('models/', '') for m in dados.get('models', []) if 'generateContent' in m['supportedGenerationMethods'] and 'gemini' in m['name']]
+                st.success(f"✅ {len(modelos_disponiveis)} modelos encontrados!")
+            else:
+                st.error("Erro ao buscar modelos.")
+        except:
+            pass
+
+    if modelos_disponiveis:
+        st.markdown("### 📡 Escolha o Modelo")
+        # Deixa o gemini-2.0-flash-001 como padrão se existir (é mais estável)
+        index_padrao = 0
+        if "gemini-2.0-flash-001" in modelos_disponiveis:
+            index_padrao = modelos_disponiveis.index("gemini-2.0-flash-001")
+        elif "gemini-flash-latest" in modelos_disponiveis:
+            index_padrao = modelos_disponiveis.index("gemini-flash-latest")
+            
+        modelo_selecionado = st.selectbox("Qual IA usar?", modelos_disponiveis, index=index_padrao)
+    else:
+        st.warning("Cole a chave para carregar a lista.")
 
 if not api_key:
-    st.warning("👈 Insira sua API Key para começar.")
     st.stop()
 
-# --- TURNO ---
+# --- APP PRINCIPAL ---
 st.divider()
-turno = st.radio(
-    "1. Selecione o Turno:",
-    ["1º Turno (06:00 - 15:48)", "2º Turno (15:48 - 25:09)", "3º Turno (01:09 - 06:00)"],
-    horizontal=True, index=1
-)
+col_turno, col_upload = st.columns([1, 2])
 
-# --- UPLOAD ---
-st.markdown("### 2. Digitalizar Ficha")
-uploaded_file = st.file_uploader("Carregue a imagem:", type=["jpg", "jpeg", "png"])
+with col_turno:
+    st.subheader("1. Turno")
+    turno = st.radio("Selecione:", ["1º Turno (06h-15h)", "2º Turno (15h-01h)", "3º Turno (01h-06h)"], index=1)
 
-if uploaded_file:
+with col_upload:
+    st.subheader("2. Foto")
+    uploaded_file = st.file_uploader("Subir imagem", type=["jpg", "png", "jpeg"])
+
+if uploaded_file and modelo_selecionado:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Imagem Carregada", use_container_width=True)
+    st.image(image, caption=f"Usando modelo: {modelo_selecionado}", use_container_width=True)
     
-    if st.button("🚀 PROCESSAR APONTAMENTO AGORA"):
-        with st.spinner("Processando com Gemini 2.0 Flash..."):
+    if st.button("🚀 PROCESSAR AGORA"):
+        with st.spinner(f"Processando com {modelo_selecionado}..."):
             try:
                 img_byte_arr = io.BytesIO()
                 image.save(img_byte_arr, format='JPEG')
                 img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
-                # --- CORREÇÃO FINAL: USANDO O MODELO QUE APARECEU NA SUA LISTA ---
-                # Sua lista mostrou "models/gemini-2.0-flash". Vamos usar esse!
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+                # URL DINÂMICA
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_selecionado}:generateContent?key={api_key}"
                 
                 payload = {
                     "contents": [{
                         "parts": [
-                            {"text": """
-                                Atue como OCR industrial especialista.
-                                Analise esta imagem manuscrita.
-                                Retorne APENAS um JSON (array de objetos) com as chaves:
-                                "Data", "Maquina", "Hora", "Desenho", "Qtd_OK", "Qtd_NOK", "Cod_Parada".
-                                REGRAS:
-                                1. Encontre DATA e MÁQUINA no cabeçalho e repita em TODAS as linhas.
-                                2. Se a hora tiver ':', mantenha (ex: 14:30).
-                                3. Ignore linhas vazias.
-                            """},
+                            {"text": """Atue como OCR industrial. Retorne JSON array: "Data", "Maquina", "Hora", "Desenho", "Qtd_OK", "Qtd_NOK", "Cod_Parada". Repita Data/Maquina do topo. Se hora tiver ':', mantenha."""},
                             {"inline_data": {"mime_type": "image/jpeg", "data": img_base64}}
                         ]
                     }]
@@ -95,18 +106,15 @@ if uploaded_file:
                 
                 if response.status_code != 200:
                     st.error(f"Erro {response.status_code}: {response.text}")
+                    st.warning("👉 Tente selecionar OUTRO modelo na barra lateral (ex: gemini-flash-latest)")
                     st.stop()
                 
-                result_json = response.json()
-                try:
-                    texto = result_json['candidates'][0]['content']['parts'][0]['text']
-                    clean_json = texto.replace("```json", "").replace("```", "").strip()
-                    df = pd.read_json(io.StringIO(clean_json))
-                except:
-                    st.error("A IA respondeu, mas não conseguiu ler a tabela. Tente uma foto mais clara.")
-                    st.stop()
+                result = response.json()
+                texto = result['candidates'][0]['content']['parts'][0]['text']
+                clean_json = texto.replace("```json", "").replace("```", "").strip()
+                df = pd.read_json(io.StringIO(clean_json))
 
-                # REGRAS DE NEGÓCIO (TURNO)
+                # LÓGICA DE HORAS
                 def tratar_hora(h):
                     h = str(h).replace(":", "").strip()
                     try: h_num = int(h)
@@ -116,12 +124,10 @@ if uploaded_file:
 
                 if "Hora" in df.columns: df["Hora"] = df["Hora"].apply(tratar_hora)
                 
-                # EXIBIÇÃO
-                st.success("✅ Leitura concluída!")
+                st.success("✅ Sucesso!")
                 df_editado = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-                
-                st.info("👇 Copie para o Excel abaixo:")
                 st.code(df_editado.to_csv(sep="\t", index=False), language="text")
-                
+                st.info("Copie e cole no Excel.")
+
             except Exception as e:
                 st.error(f"Erro: {e}")
