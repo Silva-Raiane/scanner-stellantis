@@ -8,20 +8,24 @@ import base64
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Stellantis Scanner", page_icon="🏭", layout="wide")
 
-# --- ESTILO VISUAL INDUSTRIAL (MANTIDO) ---
+# --- ESTILO VISUAL INDUSTRIAL (Amarelo e Azul) ---
 st.markdown("""
 <style>
     .stApp { background-color: #243882; color: #ffffff; }
     [data-testid="stSidebar"] { background-color: #00133b; border-right: 1px solid rgba(255, 255, 255, 0.1); }
     h1, h2, h3, p, span, label, div[data-testid="stMarkdownContainer"] p, [data-testid="stSidebar"] label { color: #ffffff !important; }
+    
+    /* Botões Amarelos de Alto Contraste */
     div.stButton > button, [data-testid="stFileUploader"] button {
         background-color: #FFC107 !important; color: #000000 !important; border: none !important;
         padding: 0.6rem 1rem; border-radius: 6px; font-weight: 800 !important; text-transform: uppercase;
-        transition: all 0.3s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
     div.stButton > button:hover { background-color: #FFD700 !important; transform: translateY(-2px); }
+    
+    /* Inputs e Seletores */
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] { color: #333333; background-color: #ffffff; }
     div[role="radiogroup"] label { background-color: rgba(0, 19, 59, 0.6); padding: 12px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, 0.2); }
-    .stTextInput input { color: #333333; background-color: #ffffff; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -31,13 +35,30 @@ with col1:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Stellantis.svg/2560px-Stellantis.svg.png", width=120)
 with col2:
     st.title("Digitalizador de Apontamento - SPW")
-    st.markdown("**Automacao via Gemini 1.5 Flash (v1beta)**")
+    st.markdown("**Sistema Multi-Modelo (Seletor de IA)**")
 
-# --- SIDEBAR ---
+# --- SIDEBAR: CONFIGURAÇÕES ---
 with st.sidebar:
     st.header("⚙️ Configuração")
     api_key_input = st.text_input("Cole sua Gemini API Key:", type="password")
     api_key = api_key_input.strip() if api_key_input else ""
+    
+    st.markdown("---")
+    st.markdown("### 📡 Sintonizar Modelo")
+    st.info("Se der erro 404, troque o modelo abaixo:")
+    
+    # O PULO DO GATO: SELETOR DE MODELOS
+    modelo_escolhido = st.selectbox(
+        "Qual versão da IA usar?",
+        options=[
+            "gemini-1.5-flash",       # Padrão
+            "gemini-1.5-flash-001",   # Versão específica (Mais estável)
+            "gemini-1.5-flash-8b",    # Versão leve (Nova)
+            "gemini-1.5-pro",         # Versão potente
+            "gemini-2.0-flash-exp"    # Experimental
+        ],
+        index=0
+    )
 
 if not api_key:
     st.warning("👈 Insira sua API Key na barra lateral para começar.")
@@ -57,17 +78,17 @@ uploaded_file = st.file_uploader("Carregue a imagem:", type=["jpg", "jpeg", "png
 
 if uploaded_file:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Visualização", use_container_width=True)
+    st.image(image, caption=f"Imagem Carregada | Usando: {modelo_escolhido}", use_container_width=True)
     
     if st.button("🚀 PROCESSAR APONTAMENTO AGORA"):
-        with st.spinner("Processando..."):
+        with st.spinner(f"Conectando com {modelo_escolhido}..."):
             try:
                 img_byte_arr = io.BytesIO()
                 image.save(img_byte_arr, format='JPEG')
                 img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
-                # --- CORREÇÃO: Usar v1beta e o alias 'latest' ---
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
+                # URL DINÂMICA BASEADA NA ESCOLHA DA BARRA LATERAL
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_escolhido}:generateContent?key={api_key}"
                 
                 payload = {
                     "contents": [{
@@ -81,7 +102,9 @@ if uploaded_file:
                 response = requests.post(url, json=payload)
                 
                 if response.status_code != 200:
-                    st.error(f"Erro Google (Cód {response.status_code}): {response.text}")
+                    st.error(f"Erro {response.status_code} no modelo {modelo_escolhido}:")
+                    st.code(response.text)
+                    st.warning("👈 Tente selecionar OUTRO MODELO na barra lateral e clique no botão de novo.")
                     st.stop()
                 
                 result_json = response.json()
@@ -90,10 +113,10 @@ if uploaded_file:
                     clean_json = texto.replace("```json", "").replace("```", "").strip()
                     df = pd.read_json(io.StringIO(clean_json))
                 except:
-                    st.error("Não foi possível ler a tabela. Tente outra foto.")
+                    st.error("A IA respondeu mas não gerou tabela. Tente outra foto.")
                     st.stop()
 
-                # REGRAS
+                # REGRAS DE NEGÓCIO
                 def tratar_hora(h):
                     h = str(h).replace(":", "").strip()
                     try: h_num = int(h)
