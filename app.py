@@ -5,114 +5,111 @@ import io
 from PIL import Image
 import base64
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
+# --- 1. CONFIGURAÇÃO DA PÁGINA (VISUAL LIMPO) ---
 st.set_page_config(
-    page_title="Stellantis Scanner",
+    page_title="Stellantis Scanner Pro",
     page_icon="🏭",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-
+# --- 2. CSS INSPIRADO NO MEDIA.STELLANTIS.COM ---
 st.markdown("""
 <style>
+    /* FUNDO GERAL - Branco/Cinza muito claro */
+    .stApp {
+        background-color: #f8f9fa;
+        color: #212529;
+    }
 
-/* FUNDO */
-.stApp {
-    background-color: #eef1f5;
-    font-family: "Segoe UI", Arial, sans-serif;
-}
+    /* BARRA LATERAL - Azul Noturno Stellantis */
+    [data-testid="stSidebar"] {
+        background-color: #0d1b2a;
+        border-right: 1px solid #dee2e6;
+    }
+    
+    /* TEXTOS NA SIDEBAR - Branco para contraste */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span, [data-testid="stSidebar"] p {
+        color: #ffffff !important;
+    }
 
-/* SIDEBAR */
-[data-testid="stSidebar"] {
-    background-color: #0b1f3f;
-    padding: 20px;
-}
+    /* BOTÕES - Azul Institucional Vibrante */
+    div.stButton > button {
+        background-color: #004481; /* Azul Stellantis */
+        color: white;
+        border: none;
+        padding: 0.6rem 1.2rem;
+        border-radius: 4px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: all 0.2s ease-in-out;
+        width: 100%;
+    }
+    div.stButton > button:hover {
+        background-color: #002a50; /* Azul mais escuro no hover */
+        color: white;
+    }
 
-/* TEXTO SIDEBAR */
-[data-testid="stSidebar"] * {
-    color: #fffff !important;
-}
+    /* CAIXAS DE SELEÇÃO E INPUTS */
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stFileUploader {
+        background-color: #ffffff;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        color: #495057;
+    }
 
-/* INPUT SIDEBAR */
-[data-testid="stSidebar"] input,
-[data-testid="stSidebar"] div[data-baseweb="select"] {
-    background: white !important;
-    color: black !important;
-    border-radius: 6px;
-}
+    /* TABELAS - Estilo limpo */
+    [data-testid="stDataFrame"] {
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+    }
 
-/* TÍTULOS */
-h1, h2, h3 {
-    color: #0b1f3f !important;
-    font-weight: 600;
-}
-
-/* TEXTO */
-p, label, span {
-    color: #333 !important;
-}
-
-/* BOTÕES */
-div.stButton > button {
-    background-color: #0b1f3f !important;
-    color: white !important;
-    border-radius: 6px;
-    border: none;
-    padding: 10px 18px;
-    font-weight: 600;
-}
-
-div.stButton > button:hover {
-    background-color: #163a73 !important;
-}
-
-/* INPUTS */
-.stTextInput input,
-.stFileUploader,
-.stRadio {
-    background: white !important;
-    border-radius: 6px;
-}
-
-/* TABELAS */
-[data-testid="stDataFrame"] {
-    background: white;
-}
-
-/* LOGO */
-.stImage img {
-    display: block;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-/* LINHA */
-hr {
-    border-top: 1px solid #dcdcdc;
-}
-
+    /* TITULOS PRINCIPAIS */
+    h1, h2, h3 {
+        color: #004481;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+    
+    /* ESPAÇAMENTO (Margens que você pediu) */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 5rem;
+    }
+    
+    /* LOGO CENTRALIZADA */
+    [data-testid="stSidebar"] [data-testid="stImage"] {
+        text-align: center;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 100%;
+    }
 </style>
 """, unsafe_allow_html=True)
 
+# --- 3. GERENCIAMENTO DE ESTADO (MEMÓRIA) ---
+# Isso impede que os dados sumam ao interagir com a tela
+if 'tabela_final' not in st.session_state:
+    st.session_state.tabela_final = pd.DataFrame()
 
-# --- CABEÇALHO ---
-col1, col2 = st.columns([1, 6])
-with col1:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Stellantis.svg/2560px-Stellantis.svg.png", width=120)
-with col2:
-    st.title("Digitalizador de Apontamento - SPW")
-    st.markdown("**Seletor Dinâmico de Modelos**")
-
-# --- SIDEBAR ---
+# --- 4. BARRA LATERAL (CONFIGURAÇÕES) ---
 with st.sidebar:
-    st.header("⚙️ Configuração")
-    api_key_input = st.text_input("Cole sua Gemini API Key:", type="password")
-    api_key = api_key_input.strip() if api_key_input else ""
+    # Tenta carregar a logo local, se não der, usa texto
+    try:
+        st.image("logo_azul-removebg-preview.png", width=180) 
+    except:
+        st.title("STELLANTIS")
     
+    st.markdown("---")
+    st.header("⚙️ Configuração")
+    
+    api_key = st.text_input("Chave API Gemini:", type="password")
+    
+    # Busca de Modelos
     modelos_disponiveis = []
     modelo_selecionado = ""
-
+    
     if api_key:
         try:
             url_modelos = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
@@ -120,105 +117,132 @@ with st.sidebar:
             if resp.status_code == 200:
                 dados = resp.json()
                 modelos_disponiveis = [
-                    m['name'].replace('models/', '')
-                    for m in dados.get('models', [])
-                    if 'generateContent' in m['supportedGenerationMethods']
-                    and 'gemini' in m['name']
+                    m['name'].replace('models/', '') 
+                    for m in dados.get('models', []) 
+                    if 'generateContent' in m['supportedGenerationMethods'] and 'gemini' in m['name']
                 ]
-                st.success(f"✅ {len(modelos_disponiveis)} modelos encontrados!")
-            else:
-                st.error("Erro ao buscar modelos.")
+                st.success(f"Conectado! {len(modelos_disponiveis)} modelos disponíveis.")
         except:
             pass
 
     if modelos_disponiveis:
-        st.markdown("### 📡 Escolha o Modelo")
-        index_padrao = 0
+        # Tenta selecionar o Flash 2.0 ou Latest automaticamente
+        idx = 0
         if "gemini-2.0-flash-001" in modelos_disponiveis:
-            index_padrao = modelos_disponiveis.index("gemini-2.0-flash-001")
+            idx = modelos_disponiveis.index("gemini-2.0-flash-001")
         elif "gemini-flash-latest" in modelos_disponiveis:
-            index_padrao = modelos_disponiveis.index("gemini-flash-latest")
-
-        modelo_selecionado = st.selectbox(
-            "Qual IA usar?",
-            modelos_disponiveis,
-            index=index_padrao
-        )
-    else:
-        st.warning("Cole a chave para carregar a lista.")
-
-if not api_key:
-    st.stop()
-
-# --- APP PRINCIPAL ---
-st.divider()
-col_turno, col_upload = st.columns([1, 2])
-
-with col_turno:
-    st.subheader("1. Turno")
+            idx = modelos_disponiveis.index("gemini-flash-latest")
+            
+        modelo_selecionado = st.selectbox("Modelo IA:", modelos_disponiveis, index=idx)
+    
+    st.markdown("---")
+    st.markdown("### 🕒 Turno")
     turno = st.radio(
-        "Selecione:",
+        "Selecione para cálculo de horas:",
         ["1º Turno (06h-15h)", "2º Turno (15h-01h)", "3º Turno (01h-06h)"],
         index=1
     )
+    
+    if not st.session_state.tabela_final.empty:
+        st.markdown("---")
+        if st.button("🗑️ Limpar Tabela"):
+            st.session_state.tabela_final = pd.DataFrame()
+            st.rerun()
 
-with col_upload:
-    st.subheader("2. Foto")
-    uploaded_file = st.file_uploader("Subir imagem", type=["jpg", "png", "jpeg"])
+# --- 5. ÁREA PRINCIPAL ---
+st.title("Digitalização de Apontamento - SPW")
+st.markdown("Carregue múltiplas fotos para processar tudo de uma vez.")
 
-if uploaded_file and modelo_selecionado:
-    image = Image.open(uploaded_file)
-    st.image(image, caption=f"Usando modelo: {modelo_selecionado}", use_container_width=True)
+if not api_key:
+    st.warning("👈 Por favor, insira sua Chave API na barra lateral para começar.")
+    st.stop()
 
-    if st.button("🚀 PROCESSAR AGORA"):
-        with st.spinner(f"Processando com {modelo_selecionado}..."):
+# Upload Múltiplo
+uploaded_files = st.file_uploader(
+    "Arraste suas fotos aqui (JPG, PNG)", 
+    type=['png', 'jpg', 'jpeg'], 
+    accept_multiple_files=True
+)
+
+# Botão de Processar
+if uploaded_files and modelo_selecionado:
+    st.write(f"📂 {len(uploaded_files)} arquivos selecionados.")
+    
+    if st.button("🚀 PROCESSAR TODOS OS ARQUIVOS"):
+        todas_as_leituras = []
+        barra_progresso = st.progress(0)
+        
+        for i, uploaded_file in enumerate(uploaded_files):
+            # Atualiza barra
+            barra_progresso.progress((i + 1) / len(uploaded_files))
+            
             try:
+                # Prepara imagem
+                image = Image.open(uploaded_file)
                 img_byte_arr = io.BytesIO()
                 image.save(img_byte_arr, format='JPEG')
                 img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
+                # Chama Gemini
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_selecionado}:generateContent?key={api_key}"
-
                 payload = {
                     "contents": [{
                         "parts": [
-                            {"text": """Atue como OCR industrial. Retorne JSON array: "Data", "Maquina", "Hora", "Desenho", "Qtd_OK", "Qtd_NOK", "Cod_Parada". Repita Data/Maquina do topo. Se hora tiver ':', mantenha."""},
+                            {"text": """Atue como OCR industrial. Retorne JSON array: "Data", "Maquina", "Hora", "Desenho", "Qtd_OK", "Qtd_NOK", "Cod_Parada". Repita Data/Maquina do topo em cada linha. Se hora tiver ':', mantenha."""},
                             {"inline_data": {"mime_type": "image/jpeg", "data": img_base64}}
                         ]
                     }]
                 }
-
+                
                 response = requests.post(url, json=payload)
-
-                if response.status_code != 200:
-                    st.error(f"Erro {response.status_code}: {response.text}")
-                    st.warning("👉 Tente selecionar OUTRO modelo.")
-                    st.stop()
-
-                result = response.json()
-                texto = result['candidates'][0]['content']['parts'][0]['text']
-                clean_json = texto.replace("```json", "").replace("```", "").strip()
-                df = pd.read_json(io.StringIO(clean_json))
-
-                def tratar_hora(h):
-                    h = str(h).replace(":", "").strip()
-                    try:
-                        h_num = int(h)
-                    except:
-                        return h
-
-                    if "2º Turno" in turno and 0 <= h_num <= 200:
-                        return str(h_num + 2400)
-
-                    return str(h_num)
-
-                if "Hora" in df.columns:
-                    df["Hora"] = df["Hora"].apply(tratar_hora)
-
-                st.success("✅ Sucesso!")
-                df_editado = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-                st.code(df_editado.to_csv(sep="\t", index=False), language="text")
-                st.info("Copie e cole no Excel.")
-
+                if response.status_code == 200:
+                    result = response.json()
+                    texto = result['candidates'][0]['content']['parts'][0]['text']
+                    clean_json = texto.replace("```json", "").replace("```", "").strip()
+                    df_temp = pd.read_json(io.StringIO(clean_json))
+                    todas_as_leituras.append(df_temp)
+                else:
+                    st.error(f"Erro no arquivo {uploaded_file.name}: {response.text}")
+                    
             except Exception as e:
-                st.error(f"Erro: {e}")
+                st.error(f"Falha ao ler {uploaded_file.name}: {e}")
+
+        # Consolida tudo
+        if todas_as_leituras:
+            df_consolidado = pd.concat(todas_as_leituras, ignore_index=True)
+            
+            # Aplica Regra de Turno no dataframe final
+            def tratar_hora(h):
+                h = str(h).replace(":", "").strip()
+                try: h_num = int(h)
+                except: return h
+                if "2º Turno" in turno and 0 <= h_num <= 200: return str(h_num + 2400)
+                return str(h_num)
+
+            if "Hora" in df_consolidado.columns:
+                df_consolidado["Hora"] = df_consolidado["Hora"].apply(tratar_hora)
+            
+            # Salva na memória do navegador
+            st.session_state.tabela_final = df_consolidado
+            st.success("✅ Leitura em lote concluída!")
+            st.rerun() # Recarrega para mostrar a tabela fixa
+
+# --- 6. EXIBIÇÃO DA TABELA (PERSISTENTE) ---
+if not st.session_state.tabela_final.empty:
+    st.markdown("### 📊 Resultado Consolidado")
+    
+    # Editor de dados (permite corrigir valores na tela)
+    df_editado = st.data_editor(
+        st.session_state.tabela_final, 
+        num_rows="dynamic", 
+        use_container_width=True,
+        height=500 # Tabela mais alta para ver mais dados
+    )
+    
+    st.markdown("### Copiar para Excel")
+    st.info("Clique no ícone de copiar no canto superior direito do bloco abaixo:")
+    st.code(df_editado.to_csv(sep="\t", index=False), language="text")
+
+elif not uploaded_files:
+    # Mensagem de boas vindas se não tiver nada carregado
+    st.info("👆 Comece arrastando fotos para a área de upload acima.")
