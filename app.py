@@ -6,90 +6,95 @@ from PIL import Image
 import base64
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Stellantis Scanner", page_icon="🏭", layout="wide")
+st.set_page_config(
+    page_title="Stellantis Scanner",
+    page_icon="🏭",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- ESTILO VISUAL (ATUALIZADO PARA VISUAL CORPORATIVO) ---
+
 st.markdown("""
 <style>
 
-/* FUNDO GERAL */
+/* FUNDO */
 .stApp {
-    background-color: #f5f7fa;
-    color: #1c1c1c;
+    background-color: #eef1f5;
     font-family: "Segoe UI", Arial, sans-serif;
 }
 
 /* SIDEBAR */
 [data-testid="stSidebar"] {
     background-color: #0b1f3f;
-    border-right: 1px solid #dcdcdc;
+    padding: 20px;
 }
 
+/* TEXTO SIDEBAR */
 [data-testid="stSidebar"] * {
-    color: #ffffff !important;
+    color: #fffff !important;
+}
+
+/* INPUT SIDEBAR */
+[data-testid="stSidebar"] input,
+[data-testid="stSidebar"] div[data-baseweb="select"] {
+    background: white !important;
+    color: black !important;
+    border-radius: 6px;
 }
 
 /* TÍTULOS */
 h1, h2, h3 {
     color: #0b1f3f !important;
-    font-weight: 600 !important;
+    font-weight: 600;
 }
 
-/* TEXTOS */
-p, span, label, div[data-testid="stMarkdownContainer"] p {
-    color: #333333 !important;
-}
-
-/* INPUTS */
-.stTextInput input,
-.stSelectbox div[data-baseweb="select"],
-.stFileUploader,
-.stRadio {
-    background-color: #ffffff !important;
-    color: #222 !important;
-    border-radius: 6px;
-    border: 1px solid #d0d7e2;
+/* TEXTO */
+p, label, span {
+    color: #333 !important;
 }
 
 /* BOTÕES */
 div.stButton > button {
     background-color: #0b1f3f !important;
-    color: #ffffff !important;
-    border-radius: 6px !important;
-    border: none !important;
-    font-weight: 600 !important;
-    padding: 10px 16px !important;
+    color: white !important;
+    border-radius: 6px;
+    border: none;
+    padding: 10px 18px;
+    font-weight: 600;
 }
 
 div.stButton > button:hover {
     background-color: #163a73 !important;
 }
 
+/* INPUTS */
+.stTextInput input,
+.stFileUploader,
+.stRadio {
+    background: white !important;
+    border-radius: 6px;
+}
+
 /* TABELAS */
 [data-testid="stDataFrame"] {
-    background-color: #ffffff;
+    background: white;
 }
 
-/* HEADER */
-header {
-    background: #ffffff;
-}
-
-/* Centraliza logo */
+/* LOGO */
 .stImage img {
     display: block;
     margin-left: auto;
     margin-right: auto;
 }
 
-/* Linha divisória */
+/* LINHA */
 hr {
-    border: none;
     border-top: 1px solid #dcdcdc;
 }
 
 </style>
 """, unsafe_allow_html=True)
+
 
 # --- CABEÇALHO ---
 col1, col2 = st.columns([1, 6])
