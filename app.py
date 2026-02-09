@@ -5,7 +5,7 @@ import io
 from PIL import Image
 import base64
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA ---
+
 st.set_page_config(
     page_title="Stellantis Scanner Pro",
     page_icon="🏭",
@@ -13,7 +13,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. CSS (Visual Media Stellantis) ---
 st.markdown("""
 <style>
     .stApp { background-color: #f8f9fa; color: #212529; }
@@ -29,11 +28,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. GERENCIAMENTO DE ESTADO ---
 if 'tabela_final' not in st.session_state:
     st.session_state.tabela_final = pd.DataFrame()
 
-# --- 4. BARRA LATERAL ---
 with st.sidebar:
     try:
         st.image("logo_azul-removebg-preview.png", width=180) 
@@ -85,7 +82,6 @@ with st.sidebar:
             st.session_state.tabela_final = pd.DataFrame()
             st.rerun()
 
-# --- 5. ÁREA PRINCIPAL ---
 st.title("Digitalização de Apontamento - SPW")
 st.markdown("Carregue as fichas de produção para digitalizar.")
 
@@ -179,7 +175,6 @@ if uploaded_files and modelo_selecionado:
             st.success("✅ Leitura concluída com separação de horas!")
             st.rerun()
 
-# --- 6. EXIBIÇÃO DA TABELA ---
 if not st.session_state.tabela_final.empty:
     st.markdown("### 📊 Resultado Consolidado")
     
@@ -190,9 +185,6 @@ if not st.session_state.tabela_final.empty:
         height=500
     )
     
-    st.markdown("### Copiar para Excel")
-    st.info("Clique no ícone de copiar no canto superior direito da tabela abaixo:")
-    st.code(df_editado.to_csv(sep="\t", index=False), language="text")
 
 elif not uploaded_files:
     st.info("👆 Faça o upload das fotos para começar.")
