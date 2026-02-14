@@ -112,7 +112,7 @@ if uploaded_files and modelo_selecionado:
 
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_selecionado}:generateContent?key={api_key}"
                 
-                # --- PROMPT ATUALIZADO: PEDINDO DUAS COLUNAS DE HORA ---
+            
                 prompt_texto = """
                 Atue como OCR industrial. Analise a tabela manuscrita.
                 Retorne APENAS um JSON array com os objetos.
@@ -149,25 +149,25 @@ if uploaded_files and modelo_selecionado:
         if todas_as_leituras:
             df_consolidado = pd.concat(todas_as_leituras, ignore_index=True)
             
-            # --- REGRA DE HORAS PARA AS DUAS COLUNAS ---
+            
             def tratar_hora(h):
                 if pd.isna(h) or h == "": return ""
                 h = str(h).replace(":", "").strip()
                 try: h_num = int(h)
                 except: return h
-                # Se for 2º turno e a hora for entre 00:00 e 02:00, soma 2400 (virada do dia)
+                
                 if "2º Turno" in turno and 0 <= h_num <= 250: 
                     return str(h_num + 2400)
                 return str(h_num)
 
-            # Aplica a regra nas duas colunas se elas existirem
+            
             for col in ["Hora_Inicio", "Hora_Fim"]:
                 if col in df_consolidado.columns:
                     df_consolidado[col] = df_consolidado[col].apply(tratar_hora)
             
-            # Reordenar colunas para ficar bonito
+            
             cols_ordem = ["Data", "Maquina", "Hora_Inicio", "Hora_Fim", "Desenho", "Qtd_OK", "Qtd_NOK", "Cod_Parada"]
-            # Garante que só pegamos colunas que realmente existem no DF (para evitar erro se a IA esquecer alguma)
+            
             cols_finais = [c for c in cols_ordem if c in df_consolidado.columns]
             df_consolidado = df_consolidado[cols_finais]
 
